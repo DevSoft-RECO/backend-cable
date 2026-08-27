@@ -116,6 +116,17 @@ class PagoController extends Controller
     }
 
     /**
+     * Obtener un pago específico.
+     */
+    public function show($id)
+    {
+        $pago = Pago::with(['cargo.contrato.cliente', 'cargo.contrato.plan', 'user'])
+            ->findOrFail($id);
+            
+        return response()->json($pago);
+    }
+
+    /**
      * Registrar el cobro/pago de un cargo pendiente.
      */
     public function registrarPago(Request $request)
@@ -153,10 +164,26 @@ class PagoController extends Controller
         $montoFinal = round($montoOriginal + $montoMora, 2);
 
         $pago = DB::transaction(function () use ($request, $cargo, $montoFinal, $contrato) {
+            // Generar folio secuencial REC-AAAA-NNNN
+            $year = Carbon::now()->year;
+            $latestPagoThisYear = Pago::whereYear('fecha_pago', $year)
+                ->whereNotNull('codigo_recibo')
+                ->orderBy('id', 'desc')
+                ->first();
+            $nextSequence = 1;
+            if ($latestPagoThisYear) {
+                $parts = explode('-', $latestPagoThisYear->codigo_recibo);
+                if (count($parts) === 3) {
+                    $nextSequence = ((int) $parts[2]) + 1;
+                }
+            }
+            $codigoRecibo = 'REC-' . $year . '-' . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+
             // 1. Crear el pago
             $pago = Pago::create([
                 'cargo_id'     => $cargo->id,
-                'usuario_id'   => auth()->id() ?? 1, // Fallback al admin principal si no hay auth activo en la sesion
+                'usuario_id'   => auth()->id() ?? 1, // Fallback al admin principal
+                'codigo_recibo'=> $codigoRecibo,
                 'monto_pagado' => $montoFinal,
                 'metodo_pago'  => $request->metodo_pago,
                 'referencia'   => $request->referencia,
@@ -183,5 +210,23 @@ class PagoController extends Controller
             'message' => 'Cobro registrado exitosamente.',
             'pago'    => $pago->load(['cargo.contrato.cliente', 'user'])
         ], 201);
+    }
+
+    /**
+     * Generar e imprimir en formato ticket térmico el recibo PDF.
+     */
+    public function descargarRecibo($id)
+    {
+        $pago = Pago::with(['cargo.contrato.cliente', 'cargo.contrato.plan', 'user'])
+            ->findOrFail($id);
+
+        $siteSettings = DB::table('configuraciones_sitio')->pluck('valor', 'clave')->toArray();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.recibo', compact('pago', 'siteSettings'));
+        
+        // 80mm de ancho en puntos es 226.77 pt. Altura de 450 pt es ideal para caber todo sin saltos de pagina.
+        $pdf->setPaper([0, 0, 226.77, 450], 'portrait');
+
+        return $pdf->stream('recibo-' . ($pago->codigo_recibo ?? $pago->id) . '.pdf');
     }
 }

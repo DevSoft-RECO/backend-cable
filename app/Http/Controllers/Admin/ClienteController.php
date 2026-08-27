@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Cliente;
+use App\Models\Pago;
 
 class ClienteController extends Controller
 {
@@ -86,5 +87,17 @@ class ClienteController extends Controller
         return response()->json([
             'message' => 'Cliente eliminado exitosamente.'
         ]);
+    }
+
+    /**
+     * Obtener el historial de pagos de un cliente.
+     */
+    public function getPagos($id)
+    {
+        $pagos = Pago::whereHas('cargo.contrato', function ($query) use ($id) {
+            $query->where('cliente_id', $id);
+        })->with(['cargo', 'user'])->orderBy('id', 'desc')->get();
+
+        return response()->json($pagos);
     }
 }

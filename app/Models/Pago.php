@@ -14,6 +14,7 @@ class Pago extends Model
     protected $fillable = [
         'cargo_id',
         'usuario_id',
+        'codigo_recibo',
         'monto_pagado',
         'metodo_pago',
         'referencia',

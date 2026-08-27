@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\ContratoController;
 use App\Http\Controllers\Admin\CampanaDescuentoController;
 use App\Http\Controllers\Admin\CargoController;
 use App\Http\Controllers\Admin\PagoController;
+use App\Http\Controllers\Admin\ReporteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -93,6 +94,7 @@ Route::prefix('alianza')->group(function () {
             Route::post('/',       [ClienteController::class, 'store']);
             Route::put('/{id}',    [ClienteController::class, 'update']);
             Route::delete('/{id}', [ClienteController::class, 'destroy']);
+            Route::get('/{id}/pagos', [ClienteController::class, 'getPagos']);
         });
 
         // --- Gestión de Contratos ---
@@ -122,7 +124,12 @@ Route::prefix('alianza')->group(function () {
             Route::get('/',              [PagoController::class, 'index']);
             Route::get('/buscar-cliente',[PagoController::class, 'buscarCliente']);
             Route::post('/',             [PagoController::class, 'registrarPago']);
+            Route::get('/{id}',          [PagoController::class, 'show']);
+            Route::get('/{id}/recibo',   [PagoController::class, 'descargarRecibo']);
         });
+
+        // --- Reportes Financieros ---
+        Route::get('/admin/reportes/cuadre-caja', [ReporteController::class, 'cuadreCaja']);
     });
 
 });
