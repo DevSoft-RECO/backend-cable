@@ -10,6 +10,7 @@ use App\Http\Controllers\Publico\WebAdmin\SliderController;
 use App\Http\Controllers\Publico\WebAdmin\WebsiteSettingsController;
 use App\Http\Controllers\Publico\WebAdmin\NosotrosController;
 use App\Http\Controllers\Publico\WebAdmin\ServiciosController;
+use App\Http\Controllers\Admin\PlanController;
 
 /*
 |--------------------------------------------------------------------------
@@ -71,6 +72,14 @@ Route::prefix('alianza')->group(function () {
             Route::put('/{id}',      [UserController::class, 'update']);
             Route::delete('/{id}',   [UserController::class, 'destroy']);
             Route::put('/{id}/permisos', [UserController::class, 'togglePermiso']);
+        });
+
+        // --- Gestión de Planes de Cobro ---
+        Route::prefix('admin/planes')->group(function () {
+            Route::get('/',        [PlanController::class, 'index']);
+            Route::post('/',       [PlanController::class, 'store']);
+            Route::put('/{id}',    [PlanController::class, 'update']);
+            Route::delete('/{id}', [PlanController::class, 'destroy']);
         });
     });
 
