@@ -11,6 +11,8 @@ use App\Http\Controllers\Publico\WebAdmin\WebsiteSettingsController;
 use App\Http\Controllers\Publico\WebAdmin\NosotrosController;
 use App\Http\Controllers\Publico\WebAdmin\ServiciosController;
 use App\Http\Controllers\Admin\PlanController;
+use App\Http\Controllers\Admin\ClienteController;
+use App\Http\Controllers\Admin\ContratoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -80,6 +82,22 @@ Route::prefix('alianza')->group(function () {
             Route::post('/',       [PlanController::class, 'store']);
             Route::put('/{id}',    [PlanController::class, 'update']);
             Route::delete('/{id}', [PlanController::class, 'destroy']);
+        });
+
+        // --- Gestión de Clientes ---
+        Route::prefix('admin/clientes')->group(function () {
+            Route::get('/',        [ClienteController::class, 'index']);
+            Route::post('/',       [ClienteController::class, 'store']);
+            Route::put('/{id}',    [ClienteController::class, 'update']);
+            Route::delete('/{id}', [ClienteController::class, 'destroy']);
+        });
+
+        // --- Gestión de Contratos ---
+        Route::prefix('admin/contratos')->group(function () {
+            Route::get('/',        [ContratoController::class, 'index']);
+            Route::post('/',       [ContratoController::class, 'store']);
+            Route::put('/{id}',    [ContratoController::class, 'update']);
+            Route::post('/preview',[ContratoController::class, 'preview']);
         });
     });
 
