@@ -13,6 +13,8 @@ use App\Http\Controllers\Publico\WebAdmin\ServiciosController;
 use App\Http\Controllers\Admin\PlanController;
 use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ContratoController;
+use App\Http\Controllers\Admin\CampanaDescuentoController;
+use App\Http\Controllers\Admin\CargoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -98,6 +100,20 @@ Route::prefix('alianza')->group(function () {
             Route::post('/',       [ContratoController::class, 'store']);
             Route::put('/{id}',    [ContratoController::class, 'update']);
             Route::post('/preview',[ContratoController::class, 'preview']);
+            Route::post('/facturar-mes',[ContratoController::class, 'facturarMensualidades']);
+        });
+
+        // --- Gestión de Campañas de Descuento ---
+        Route::prefix('admin/campanas-descuento')->group(function () {
+            Route::get('/',        [CampanaDescuentoController::class, 'index']);
+            Route::post('/',       [CampanaDescuentoController::class, 'store']);
+            Route::put('/{id}',    [CampanaDescuentoController::class, 'update']);
+            Route::delete('/{id}', [CampanaDescuentoController::class, 'destroy']);
+        });
+
+        // --- Auditoría de Cargos ---
+        Route::prefix('admin/cargos')->group(function () {
+            Route::get('/',        [CargoController::class, 'index']);
         });
     });
 

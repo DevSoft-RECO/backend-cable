@@ -31,6 +31,7 @@ class ContratoController extends Controller
             'precio_mensual_pactado' => 'required|numeric|min:0',
             'costo_instalacion'      => 'required|numeric|min:0',
             'fecha_inicio'           => 'required|date',
+            'campana_descuento_id'   => 'nullable|exists:campanas_descuento,id',
         ]);
 
         $plan = Plan::findOrFail($request->plan_id);
@@ -38,7 +39,7 @@ class ContratoController extends Controller
         $costoInstalacion = $request->costo_instalacion;
         $fechaInicio = Carbon::parse($request->fecha_inicio);
 
-        $preview = $this->calculateCargos($precioPactado, $costoInstalacion, $fechaInicio);
+        $preview = $this->calculateCargos($precioPactado, $costoInstalacion, $fechaInicio, $request->campana_descuento_id);
 
         return response()->json($preview);
     }
@@ -54,6 +55,7 @@ class ContratoController extends Controller
             'precio_mensual_pactado' => 'required|numeric|min:0',
             'costo_instalacion'      => 'required|numeric|min:0',
             'fecha_inicio'           => 'required|date',
+            'campana_descuento_id'   => 'nullable|exists:campanas_descuento,id',
         ]);
 
         $fechaInicio = Carbon::parse($request->fecha_inicio);
@@ -78,25 +80,29 @@ class ContratoController extends Controller
                 'costo_instalacion'      => $request->costo_instalacion,
                 'fecha_inicio'           => $request->fecha_inicio,
                 'estado'                 => 'activo',
+                'campana_descuento_id'   => $request->campana_descuento_id,
             ]);
 
             // 2. Calcular los cargos
             $calculos = $this->calculateCargos(
                 $request->precio_mensual_pactado,
                 $request->costo_instalacion,
-                $fechaInicio
+                $fechaInicio,
+                $request->campana_descuento_id
             );
 
             // 3. Crear cargos en base de datos
             foreach ($calculos['cargos'] as $c) {
                 Cargo::create([
-                    'contrato_id'       => $contrato->id,
-                    'concepto'          => $c['concepto'],
-                    'tipo'              => $c['tipo'],
-                    'monto'             => $c['monto'],
-                    'fecha_emision'     => $c['fecha_emision'],
-                    'fecha_vencimiento' => $c['fecha_vencimiento'],
-                    'estado'            => 'pendiente',
+                    'contrato_id'          => $contrato->id,
+                    'concepto'             => $c['concepto'],
+                    'tipo'                 => $c['tipo'],
+                    'monto'                => $c['monto'],
+                    'fecha_emision'        => $c['fecha_emision'],
+                    'fecha_vencimiento'    => $c['fecha_vencimiento'],
+                    'estado'               => 'pendiente',
+                    'campana_descuento_id' => $c['campana_descuento_id'] ?? null,
+                    'descuento_aplicado'   => $c['descuento_aplicado'] ?? 0.00,
                 ]);
             }
 
@@ -112,7 +118,7 @@ class ContratoController extends Controller
     /**
      * Función interna para calcular los cargos iniciales.
      */
-    private function calculateCargos($precioPactado, $costoInstalacion, Carbon $fechaInicio)
+    private function calculateCargos($precioPactado, $costoInstalacion, Carbon $fechaInicio, $campanaId = null)
     {
         $cargos = [];
         $totalCargos = 0;
@@ -126,12 +132,38 @@ class ContratoController extends Controller
 
         // Monto prorrateado
         if ($diasActivos === $diasTotalesMes) {
-            $montoProrrateado = $precioPactado;
+            $montoProrrateadoBase = $precioPactado;
             $conceptoMensualidad = "Mensualidad Completa - " . $this->getMonthNameInSpanish($fechaInicio->month) . " " . $fechaInicio->year;
         } else {
-            $montoProrrateado = round(($precioPactado / $diasTotalesMes) * $diasActivos, 2);
+            $montoProrrateadoBase = round(($precioPactado / $diasTotalesMes) * $diasActivos, 2);
             $conceptoMensualidad = "Proporcional " . $diasActivos . " días - " . $this->getMonthNameInSpanish($fechaInicio->month) . " " . $fechaInicio->year;
         }
+
+        // Aplicar descuento si aplica
+        $descuentoAplicado = 0;
+        if ($campanaId) {
+            $campana = \App\Models\CampanaDescuento::find($campanaId);
+            if ($campana && $campana->activo) {
+                // Validar vigencia de la campaña
+                $hoyStr = $fechaInicio->format('Y-m-d');
+                $vigente = true;
+                if ($campana->fecha_inicio && $hoyStr < $campana->fecha_inicio->format('Y-m-d')) {
+                    $vigente = false;
+                }
+                if ($campana->fecha_fin && $hoyStr > $campana->fecha_fin->format('Y-m-d')) {
+                    $vigente = false;
+                }
+
+                if ($vigente) {
+                    if ($campana->tipo === 'porcentaje') {
+                        $descuentoAplicado = round(($montoProrrateadoBase * $campana->valor) / 100, 2);
+                    } else {
+                        $descuentoAplicado = min($campana->valor, $montoProrrateadoBase);
+                    }
+                }
+            }
+        }
+        $montoProrrateadoNeto = round($montoProrrateadoBase - $descuentoAplicado, 2);
 
         // Fecha de Vencimiento: Día 5 del mes de inicio. 
         // Si la contratación es posterior al día 5, se vence el día 5 del siguiente mes para ser justos.
@@ -140,15 +172,17 @@ class ContratoController extends Controller
             $fechaVencimiento->addMonth();
         }
 
-        if ($montoProrrateado > 0) {
+        if ($montoProrrateadoNeto > 0) {
             $cargos[] = [
-                'concepto'          => $conceptoMensualidad,
-                'tipo'              => 'mensualidad',
-                'monto'             => $montoProrrateado,
-                'fecha_emision'     => $fechaInicio->toDateString(),
-                'fecha_vencimiento' => $fechaVencimiento->toDateString(),
+                'concepto'             => $conceptoMensualidad,
+                'tipo'                 => 'mensualidad',
+                'monto'                => $montoProrrateadoNeto,
+                'fecha_emision'        => $fechaInicio->toDateString(),
+                'fecha_vencimiento'    => $fechaVencimiento->toDateString(),
+                'campana_descuento_id' => $campanaId,
+                'descuento_aplicado'   => $descuentoAplicado,
             ];
-            $totalCargos += $montoProrrateado;
+            $totalCargos += $montoProrrateadoNeto;
         }
 
         // --- 2. Cargo de Instalación ---
@@ -195,6 +229,7 @@ class ContratoController extends Controller
             'costo_instalacion'      => 'required|numeric|min:0',
             'fecha_inicio'           => 'required|date',
             'estado'                 => 'required|in:activo,suspendido,cancelado',
+            'campana_descuento_id'   => 'nullable|exists:campanas_descuento,id',
         ]);
 
         $contrato->update([
@@ -203,11 +238,33 @@ class ContratoController extends Controller
             'costo_instalacion'      => $request->costo_instalacion,
             'fecha_inicio'           => $request->fecha_inicio,
             'estado'                 => $request->estado,
+            'campana_descuento_id'   => $request->campana_descuento_id,
         ]);
 
         return response()->json([
             'message'  => 'Contrato actualizado exitosamente.',
             'contrato' => $contrato->load(['cliente', 'plan'])
+        ]);
+    }
+
+    /**
+     * Dispara manualmente el comando Artisan de facturacion masiva.
+     */
+    public function facturarMensualidades(Request $request)
+    {
+        $fecha = $request->input('fecha');
+        
+        $params = [];
+        if ($fecha) {
+            $params['--fecha'] = $fecha;
+        }
+
+        \Illuminate\Support\Facades\Artisan::call('facturar:mensualidad', $params);
+        $output = \Illuminate\Support\Facades\Artisan::output();
+
+        return response()->json([
+            'message' => 'Facturación recurrente ejecutada de forma manual.',
+            'output'  => trim($output)
         ]);
     }
 }

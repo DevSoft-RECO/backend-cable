@@ -18,6 +18,7 @@ class Contrato extends Model
         'costo_instalacion',
         'fecha_inicio',
         'estado',
+        'campana_descuento_id',
     ];
 
     protected $casts = [
@@ -25,6 +26,14 @@ class Contrato extends Model
         'costo_instalacion'      => 'decimal:2',
         'fecha_inicio'           => 'date:Y-m-d',
     ];
+
+    /**
+     * Obtiene la campaña de descuento asociada.
+     */
+    public function campanaDescuento()
+    {
+        return $this->belongsTo(CampanaDescuento::class, 'campana_descuento_id');
+    }
 
     /**
      * Obtiene el cliente asociado a este contrato.
