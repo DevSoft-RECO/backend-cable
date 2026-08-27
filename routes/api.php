@@ -1,0 +1,77 @@
+<?php
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\Publico\WebFront\PublicDataController;
+use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Auth\UserController;
+use App\Http\Controllers\Publico\WebAdmin\SliderController;
+use App\Http\Controllers\Publico\WebAdmin\WebsiteSettingsController;
+use App\Http\Controllers\Publico\WebAdmin\NosotrosController;
+use App\Http\Controllers\Publico\WebAdmin\ServiciosController;
+
+/*
+|--------------------------------------------------------------------------
+| API Routes V1
+|--------------------------------------------------------------------------
+*/
+
+Route::prefix('alianza')->group(function () {
+
+    // --- Rutas Públicas (No requieren Token) ---
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::get('/slider', [SliderController::class, 'index']);
+    Route::get('/website/settings', [WebsiteSettingsController::class, 'index']);
+    Route::get('/public/init', [PublicDataController::class, 'init']);
+    Route::get('/servicios', [ServiciosController::class, 'indexPublic']);
+
+    // --- Rutas Protegidas (Requieren Token Bearer) ---
+    Route::middleware('auth:sanctum')->group(function () {
+
+        Route::post('/logout', [AuthController::class, 'logout']);
+        Route::get('/me', [AuthController::class, 'me']); 
+        Route::get('/user', [AuthController::class, 'me']); // Alias
+        
+        // --- Dashboard Administrativo ---
+        Route::get('/dashboard', [DashboardController::class, 'index']);
+        
+        // Actualización de perfil
+        Route::post('/profile/update', [UserController::class, 'updateProfile']); 
+
+        // --- Gestión Unificada de Slider (Banners) ---
+        Route::post('/admin/slider', [SliderController::class, 'store']);
+        Route::post('/admin/slider/{id}', [SliderController::class, 'update']);
+        Route::delete('/admin/slider/{id}', [SliderController::class, 'destroy']);
+
+        // --- Configuraciones del Sitio (Footer, etc.) ---
+        Route::match(['post', 'put'], '/website/settings', [WebsiteSettingsController::class, 'update']);
+
+        // --- Gestión de Sobre Nosotros ---
+        Route::get('/admin/nosotros', [NosotrosController::class, 'getAdminData']);
+        Route::post('/admin/nosotros/encabezado', [NosotrosController::class, 'saveEncabezado']);
+        Route::post('/admin/nosotros/registros', [NosotrosController::class, 'storeRegistro']);
+        Route::match(['post', 'put'], '/admin/nosotros/registros/{id}', [NosotrosController::class, 'updateRegistro']);
+        Route::delete('/admin/nosotros/registros/{id}', [NosotrosController::class, 'destroyRegistro']);
+
+        // --- Gestión de Servicios ---
+        Route::get('/admin/servicios', [ServiciosController::class, 'getAdminData']);
+        Route::post('/admin/servicios/encabezado', [ServiciosController::class, 'saveEncabezado']);
+        Route::post('/admin/servicios/categoria', [ServiciosController::class, 'storeCategoria']);
+        Route::put('/admin/servicios/categoria/{id}', [ServiciosController::class, 'updateCategoria']);
+        Route::delete('/admin/servicios/categoria/{id}', [ServiciosController::class, 'destroyCategoria']);
+        Route::post('/admin/servicios/plan', [ServiciosController::class, 'storePlan']);
+        Route::put('/admin/servicios/plan/{id}', [ServiciosController::class, 'updatePlan']);
+        Route::delete('/admin/servicios/plan/{id}', [ServiciosController::class, 'destroyPlan']);
+
+        // --- Gestión de Usuarios (Super Admin) ---
+        Route::prefix('admin/usuarios')->group(function () {
+            Route::get('/',          [UserController::class, 'index']);
+            Route::post('/',         [UserController::class, 'store']);
+            Route::put('/{id}',      [UserController::class, 'update']);
+            Route::delete('/{id}',   [UserController::class, 'destroy']);
+            Route::put('/{id}/permisos', [UserController::class, 'togglePermiso']);
+        });
+    });
+
+});
