@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\ClienteController;
 use App\Http\Controllers\Admin\ContratoController;
 use App\Http\Controllers\Admin\CampanaDescuentoController;
 use App\Http\Controllers\Admin\CargoController;
+use App\Http\Controllers\Admin\PagoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -114,6 +115,13 @@ Route::prefix('alianza')->group(function () {
         // --- Auditoría de Cargos ---
         Route::prefix('admin/cargos')->group(function () {
             Route::get('/',        [CargoController::class, 'index']);
+        });
+
+        // --- Cobro Móvil y Pagos ---
+        Route::prefix('admin/pagos')->group(function () {
+            Route::get('/',              [PagoController::class, 'index']);
+            Route::get('/buscar-cliente',[PagoController::class, 'buscarCliente']);
+            Route::post('/',             [PagoController::class, 'registrarPago']);
         });
     });
 
