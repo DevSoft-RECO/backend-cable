@@ -24,8 +24,6 @@ use App\Http\Controllers\Admin\ReporteController;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('alianza')->group(function () {
-
     // --- Rutas Públicas (No requieren Token) ---
     Route::post('/login', [AuthController::class, 'login']);
     Route::get('/slider', [SliderController::class, 'index']);
@@ -131,5 +129,3 @@ Route::prefix('alianza')->group(function () {
         // --- Reportes Financieros ---
         Route::get('/admin/reportes/cuadre-caja', [ReporteController::class, 'cuadreCaja']);
     });
-
-});
