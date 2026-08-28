@@ -32,4 +32,12 @@ class Cliente extends Model
     {
         return $this->hasMany(Contrato::class, 'cliente_id');
     }
+
+        /**
+     * Formatea las fechas para que no incluyan la 'Z' (UTC) al enviar el JSON al Frontend.
+     */
+    protected function serializeDate(\DateTimeInterface $date)
+    {
+        return $date->format('Y-m-d H:i:s');
+    }
 }
