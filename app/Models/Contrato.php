@@ -58,4 +58,9 @@ class Contrato extends Model
     {
         return $this->hasMany(Cargo::class, 'contrato_id');
     }
+
+    public function detalleTecnico()
+    {
+        return $this->hasOne(DetalleTecnico::class, 'contrato_id');
+    }
 }

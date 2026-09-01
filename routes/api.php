@@ -117,6 +117,12 @@ use App\Http\Controllers\Admin\ReporteController;
             Route::get('/',        [CargoController::class, 'index']);
         });
 
+        // --- Detalles Técnicos (Equipos) ---
+        Route::prefix('admin/detalles-tecnicos')->group(function () {
+            Route::get('/',               [\App\Http\Controllers\Admin\DetalleTecnicoController::class, 'index']);
+            Route::post('/{contrato_id}', [\App\Http\Controllers\Admin\DetalleTecnicoController::class, 'update']);
+        });
+
         // --- Cobro Móvil y Pagos ---
         Route::prefix('admin/pagos')->group(function () {
             Route::get('/',              [PagoController::class, 'index']);
