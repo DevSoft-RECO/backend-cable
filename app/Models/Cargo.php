@@ -21,6 +21,7 @@ class Cargo extends Model
         'estado',
         'campana_descuento_id',
         'descuento_aplicado',
+        'saldo_pendiente',
     ];
 
     protected $casts = [

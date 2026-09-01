@@ -122,6 +122,7 @@ use App\Http\Controllers\Admin\ReporteController;
             Route::get('/',              [PagoController::class, 'index']);
             Route::get('/buscar-cliente',[PagoController::class, 'buscarCliente']);
             Route::post('/',             [PagoController::class, 'registrarPago']);
+            Route::post('/global',       [PagoController::class, 'registrarPagoGlobal']);
             Route::get('/{id}',          [PagoController::class, 'show']);
             Route::get('/{id}/recibo',   [PagoController::class, 'descargarRecibo']);
         });

@@ -58,16 +58,20 @@ class PagoController extends Controller
             if ($contrato) {
                 // Obtener cargos pendientes o vencidos para este contrato
                 $cargos = Cargo::where('contrato_id', $contrato->id)
-                    ->where('estado', 'pendiente')
+                    ->whereIn('estado', ['pendiente', 'parcial'])
+                    ->orderBy('fecha_emision', 'asc')
                     ->get();
 
                 foreach ($cargos as $cargo) {
                     $montoOriginal = $cargo->monto;
+                    $saldoPendiente = $cargo->saldo_pendiente ?? $cargo->monto;
                     $montoMora = 0.00;
 
                     // Calcular mora si aplica según el plan
                     $plan = $contrato->plan;
-                    if ($plan && $plan->mora_base > 0) {
+                    // Solo cobramos mora si el saldo es igual al original (no se ha abonado la primera vez)
+                    // O si decides que siempre se suma mora. Asumimos que si abonó, ya pagó la mora.
+                    if ($plan && $plan->mora_base > 0 && $saldoPendiente == $montoOriginal) {
                         $diasGracia = $plan->dias_gracia ?? 0;
                         $fechaVencimientoLimite = Carbon::parse($cargo->fecha_vencimiento)->addDays($diasGracia);
 
@@ -76,7 +80,7 @@ class PagoController extends Controller
                         }
                     }
 
-                    $totalCargo = round($montoOriginal + $montoMora, 2);
+                    $totalCargo = round($saldoPendiente + $montoMora, 2);
                     $totalPendiente += $totalCargo;
 
                     $cargosPendientes[] = [
@@ -84,6 +88,8 @@ class PagoController extends Controller
                         'concepto'           => $cargo->concepto,
                         'tipo'               => $cargo->tipo,
                         'monto_base'         => $montoOriginal,
+                        'saldo_pendiente'    => $saldoPendiente,
+                        'estado'             => $cargo->estado,
                         'descuento_aplicado' => $cargo->descuento_aplicado ?? 0.00,
                         'monto_mora'         => $montoMora,
                         'total'              => $totalCargo,
@@ -126,8 +132,110 @@ class PagoController extends Controller
         return response()->json($pago);
     }
 
+    public function registrarPagoGlobal(Request $request)
+    {
+        $request->validate([
+            'contrato_id'  => 'required|exists:contratos,id',
+            'monto_pago'   => 'required|numeric|min:1',
+            'metodo_pago'  => 'required|in:efectivo,transferencia,deposito',
+            'referencia'   => 'nullable|string|max:100',
+        ]);
+
+        $montoRestante = $request->monto_pago;
+        $contrato = Contrato::with('plan')->findOrFail($request->contrato_id);
+        
+        // Obtener cargos pendientes o parciales
+        $cargos = Cargo::where('contrato_id', $contrato->id)
+            ->whereIn('estado', ['pendiente', 'parcial'])
+            ->orderBy('fecha_emision', 'asc')
+            ->orderBy('id', 'asc')
+            ->get();
+
+        if ($cargos->isEmpty()) {
+            return response()->json(['message' => 'No hay deuda pendiente.'], 422);
+        }
+
+        $pagosGenerados = [];
+
+        DB::transaction(function () use ($request, $cargos, &$montoRestante, &$pagosGenerados, $contrato) {
+            // Generar folio secuencial REC-AAAA-NNNN único para toda la transacción
+            $year = Carbon::now()->year;
+            $latestPagoThisYear = Pago::whereYear('fecha_pago', $year)
+                ->whereNotNull('codigo_recibo')
+                ->orderBy('id', 'desc')
+                ->first();
+            $nextSequence = 1;
+            if ($latestPagoThisYear) {
+                $parts = explode('-', $latestPagoThisYear->codigo_recibo);
+                if (count($parts) === 3) {
+                    $nextSequence = ((int) $parts[2]) + 1;
+                }
+            }
+            $codigoRecibo = 'REC-' . $year . '-' . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+            $hoy = Carbon::now();
+
+            foreach ($cargos as $cargo) {
+                if ($montoRestante <= 0) break;
+
+                // Re-calcular mora (simplificado como estaba en el original)
+                $montoMora = 0.00;
+                $plan = $contrato->plan;
+                if ($plan && $plan->mora_base > 0) {
+                    $diasGracia = $plan->dias_gracia ?? 0;
+                    $fechaVencimientoLimite = Carbon::parse($cargo->fecha_vencimiento)->addDays($diasGracia);
+                    if ($hoy->greaterThan($fechaVencimientoLimite)) {
+                        $montoMora = $plan->mora_base;
+                    }
+                }
+
+                // Si el saldo_pendiente es nulo, asumimos que es el monto total
+                $saldoDeuda = $cargo->saldo_pendiente ?? $cargo->monto;
+                if ($saldoDeuda == $cargo->monto) {
+                    $saldoDeuda += $montoMora; // Primera vez que se abona
+                }
+
+                // ¿Cuánto vamos a pagar de este cargo?
+                $montoAAplicar = min((float) $montoRestante, (float) $saldoDeuda);
+                $montoRestante -= $montoAAplicar;
+
+                $nuevoSaldo = round($saldoDeuda - $montoAAplicar, 2);
+                $nuevoEstado = $nuevoSaldo <= 0 ? 'pagado' : 'parcial';
+
+                // Actualizar cargo
+                $cargo->update([
+                    'saldo_pendiente' => max(0, $nuevoSaldo),
+                    'estado' => $nuevoEstado
+                ]);
+
+                // Crear el pago
+                $pago = Pago::create([
+                    'cargo_id'     => $cargo->id,
+                    'usuario_id'   => auth()->id() ?? 1,
+                    'codigo_recibo'=> $codigoRecibo,
+                    'monto_pagado' => $montoAAplicar,
+                    'metodo_pago'  => $request->metodo_pago,
+                    'referencia'   => $request->referencia,
+                    'fecha_pago'   => $hoy,
+                ]);
+
+                $pagosGenerados[] = $pago;
+            }
+
+            // Si el contrato tenía una campaña de descuento asignada, la limpiamos si se pagó algo
+            if ($contrato->campana_descuento_id && count($pagosGenerados) > 0) {
+                $contrato->update(['campana_descuento_id' => null]);
+            }
+        });
+
+        return response()->json([
+            'message' => 'Cobro registrado exitosamente.',
+            'pagos'    => $pagosGenerados,
+            'recibo'   => count($pagosGenerados) > 0 ? $pagosGenerados[0]->codigo_recibo : null
+        ], 201);
+    }
+
     /**
-     * Registrar el cobro/pago de un cargo pendiente.
+     * Registrar el cobro/pago de un cargo pendiente. (Individual)
      */
     public function registrarPago(Request $request)
     {
@@ -217,16 +325,29 @@ class PagoController extends Controller
      */
     public function descargarRecibo($id)
     {
-        $pago = Pago::with(['cargo.contrato.cliente', 'cargo.contrato.plan', 'user'])
-            ->findOrFail($id);
+        $pagoInicial = Pago::findOrFail($id);
+
+        // Buscar todos los pagos que comparten el mismo recibo
+        // Si no tiene código de recibo (pagos antiguos), solo traemos ese pago
+        if ($pagoInicial->codigo_recibo) {
+            $pagos = Pago::with(['cargo.contrato.cliente', 'cargo.contrato.plan', 'user'])
+                ->where('codigo_recibo', $pagoInicial->codigo_recibo)
+                ->get();
+        } else {
+            $pagos = Pago::with(['cargo.contrato.cliente', 'cargo.contrato.plan', 'user'])
+                ->where('id', $id)
+                ->get();
+        }
 
         $siteSettings = DB::table('configuraciones_sitio')->pluck('valor', 'clave')->toArray();
 
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.recibo', compact('pago', 'siteSettings'));
+        // Enviamos la colección de pagos a la vista en lugar de uno solo
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.recibo', compact('pagos', 'siteSettings'));
         
-        // 80mm de ancho en puntos es 226.77 pt. Altura de 450 pt es ideal para caber todo sin saltos de pagina.
-        $pdf->setPaper([0, 0, 226.77, 450], 'portrait');
+        // 80mm de ancho en puntos es 226.77 pt. Altura variable según items, base 450 pt.
+        $altura = 400 + (count($pagos) * 50);
+        $pdf->setPaper([0, 0, 226.77, $altura], 'portrait');
 
-        return $pdf->stream('recibo-' . ($pago->codigo_recibo ?? $pago->id) . '.pdf');
+        return $pdf->stream('recibo-' . ($pagoInicial->codigo_recibo ?? $pagoInicial->id) . '.pdf');
     }
 }
