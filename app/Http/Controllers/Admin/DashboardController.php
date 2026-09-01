@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-
 use App\Models\Pago;
 use App\Models\Cargo;
 use Carbon\Carbon;
@@ -24,10 +23,49 @@ class DashboardController extends Controller
             $carbonMes = Carbon::now();
         }
 
+        $hoy = Carbon::now()->toDateString();
+
         // --- 1. DATOS GENERALES HISTÓRICOS ---
         $totalProyectado = (float) Cargo::sum('monto');
-        $totalRecaudado = (float) Pago::sum('monto_pagado');
-        $totalPendiente = (float) Cargo::where('estado', 'pendiente')->sum('monto');
+        $totalRecaudado  = (float) Pago::sum('monto_pagado');
+        $totalPendiente  = (float) Cargo::whereIn('estado', ['pendiente', 'parcial'])
+            ->sum(DB::raw('CASE WHEN saldo_pendiente IS NOT NULL AND saldo_pendiente > 0 THEN saldo_pendiente ELSE monto END'));
+
+        // Pendientes en período de gracia (fecha_vencimiento >= hoy)
+        $totalPendienteEnGracia = (float) Cargo::whereIn('estado', ['pendiente', 'parcial'])
+            ->whereDate('fecha_vencimiento', '>=', $hoy)
+            ->sum(DB::raw('CASE WHEN saldo_pendiente IS NOT NULL AND saldo_pendiente > 0 THEN saldo_pendiente ELSE monto END'));
+
+        // Pendientes ya atrasados / fuera de fecha de gracia (fecha_vencimiento < hoy)
+        $totalPendienteAtrasado = (float) Cargo::whereIn('estado', ['pendiente', 'parcial'])
+            ->whereDate('fecha_vencimiento', '<', $hoy)
+            ->sum(DB::raw('CASE WHEN saldo_pendiente IS NOT NULL AND saldo_pendiente > 0 THEN saldo_pendiente ELSE monto END'));
+
+        // Clientes en período de gracia (tienen pagos pendientes pero aún no se vencen)
+        $clientesEnGraciaCount = DB::table('clientes')
+            ->join('contratos', 'clientes.id', '=', 'contratos.cliente_id')
+            ->join('cargos', 'contratos.id', '=', 'cargos.contrato_id')
+            ->whereIn('cargos.estado', ['pendiente', 'parcial'])
+            ->whereDate('cargos.fecha_vencimiento', '>=', $hoy)
+            ->distinct('clientes.id')
+            ->count('clientes.id');
+
+        // Clientes con cobros VENCIDOS (fuera de la fecha de gracia: fecha_vencimiento < hoy)
+        $clientesAtrasadosQuery = DB::table('clientes')
+            ->join('contratos', 'clientes.id', '=', 'contratos.cliente_id')
+            ->join('cargos', 'contratos.id', '=', 'cargos.contrato_id')
+            ->whereIn('cargos.estado', ['pendiente', 'parcial'])
+            ->whereDate('cargos.fecha_vencimiento', '<', $hoy)
+            ->select(
+                'clientes.nombre',
+                'clientes.codigo_cliente',
+                DB::raw('COUNT(cargos.id) as cargos_atrasados'),
+                DB::raw('SUM(CASE WHEN cargos.saldo_pendiente IS NOT NULL AND cargos.saldo_pendiente > 0 THEN cargos.saldo_pendiente ELSE cargos.monto END) as monto_atrasado')
+            )
+            ->groupBy('clientes.id', 'clientes.nombre', 'clientes.codigo_cliente')
+            ->having('cargos_atrasados', '>', 0)
+            ->orderBy('cargos_atrasados', 'desc')
+            ->get();
 
         // --- 2. DATOS FILTRADOS POR MES ---
         $mesProyectado = (float) Cargo::whereMonth('fecha_emision', $carbonMes->month)
@@ -53,22 +91,7 @@ class DashboardController extends Controller
             ->groupBy('users.id', 'users.name')
             ->get();
 
-        // --- 4. LISTA DE CLIENTES ATRASADOS (Global) ---
-        $clientesAtrasados = DB::table('clientes')
-            ->join('contratos', 'clientes.id', '=', 'contratos.cliente_id')
-            ->join('cargos', 'contratos.id', '=', 'cargos.contrato_id')
-            ->where('cargos.estado', 'pendiente')
-            ->select(
-                'clientes.nombre',
-                'clientes.codigo_cliente',
-                DB::raw('COUNT(cargos.id) as cargos_atrasados')
-            )
-            ->groupBy('clientes.id', 'clientes.nombre', 'clientes.codigo_cliente')
-            ->having('cargos_atrasados', '>', 0)
-            ->orderBy('cargos_atrasados', 'desc')
-            ->get();
-
-        // --- 5. DATOS PARA GRÁFICOS (Últimos 6 meses) ---
+        // --- 4. DATOS PARA GRÁFICOS (Últimos 6 meses) ---
         $chartLabels = [];
         $chartProyectado = [];
         $chartRecaudado = [];
@@ -88,9 +111,13 @@ class DashboardController extends Controller
 
         return response()->json([
             'general' => [
-                'total_proyectado' => round($totalProyectado, 2),
-                'total_recaudado'  => round($totalRecaudado, 2),
-                'total_pendiente'  => round($totalPendiente, 2),
+                'total_proyectado'         => round($totalProyectado, 2),
+                'total_recaudado'          => round($totalRecaudado, 2),
+                'total_pendiente'          => round($totalPendiente, 2),
+                'total_pendiente_gracia'   => round($totalPendienteEnGracia, 2),
+                'total_pendiente_atrasado' => round($totalPendienteAtrasado, 2),
+                'clientes_en_gracia'       => $clientesEnGraciaCount,
+                'clientes_atrasados'       => count($clientesAtrasadosQuery),
             ],
             'mensual' => [
                 'mes_nombre'      => $carbonMes->translatedFormat('F Y'),
@@ -104,7 +131,7 @@ class DashboardController extends Controller
                 'recaudado'  => $chartRecaudado,
             ],
             'cobradores'         => $cobradores,
-            'clientes_atrasados' => $clientesAtrasados,
+            'clientes_atrasados' => $clientesAtrasadosQuery,
         ]);
     }
 }
