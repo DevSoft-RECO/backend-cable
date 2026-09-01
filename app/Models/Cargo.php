@@ -46,4 +46,12 @@ class Cargo extends Model
     {
         return $this->belongsTo(Contrato::class, 'contrato_id');
     }
+
+    /**
+     * Obtiene los pagos asociados a este cargo.
+     */
+    public function pagos()
+    {
+        return $this->hasMany(Pago::class, 'cargo_id');
+    }
 }

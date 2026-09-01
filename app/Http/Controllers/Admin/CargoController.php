@@ -13,7 +13,7 @@ class CargoController extends Controller
      */
     public function index()
     {
-        $cargos = Cargo::with(['contrato.cliente', 'contrato.plan', 'campanaDescuento'])
+        $cargos = Cargo::with(['contrato.cliente', 'contrato.plan', 'campanaDescuento', 'pagos'])
             ->orderBy('id', 'desc')
             ->get();
             
