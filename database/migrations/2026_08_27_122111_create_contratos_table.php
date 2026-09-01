@@ -19,6 +19,8 @@ return new class extends Migration
             $table->decimal('costo_instalacion', 10, 2)->default(0.00);
             $table->date('fecha_inicio');
             $table->enum('estado', ['activo', 'suspendido', 'cancelado'])->default('activo');
+            $table->string('direccion_servicio')->nullable();
+            $table->string('coordenadas_gps')->nullable();
             $table->timestamps();
         });
     }

@@ -18,6 +18,8 @@ class Contrato extends Model
         'costo_instalacion',
         'fecha_inicio',
         'estado',
+        'direccion_servicio',
+        'coordenadas_gps',
         'campana_descuento_id',
     ];
 

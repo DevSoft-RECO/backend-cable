@@ -40,22 +40,19 @@ class PagoController extends Controller
         $clientes = Cliente::where('codigo_cliente', $queryStr)
             ->orWhere('numero_identificacion', $queryStr)
             ->orWhere('nombre', 'LIKE', '%' . $queryStr . '%')
-            ->with(['contratos.plan', 'contratos.campanaDescuento'])
+            ->with(['contratos' => function ($query) {
+                $query->whereIn('estado', ['activo', 'suspendido'])->with(['plan', 'campanaDescuento']);
+            }])
             ->get();
 
         $resultados = [];
         $hoy = Carbon::now();
 
         foreach ($clientes as $cliente) {
-            // Obtener contrato activo o suspendido
-            $contrato = $cliente->contratos->first(function ($c) {
-                return $c->estado === 'activo' || $c->estado === 'suspendido';
-            });
+            foreach ($cliente->contratos as $contrato) {
+                $cargosPendientes = [];
+                $totalPendiente = 0;
 
-            $cargosPendientes = [];
-            $totalPendiente = 0;
-
-            if ($contrato) {
                 // Obtener cargos pendientes o vencidos para este contrato
                 $cargos = Cargo::where('contrato_id', $contrato->id)
                     ->whereIn('estado', ['pendiente', 'parcial'])
@@ -69,8 +66,6 @@ class PagoController extends Controller
 
                     // Calcular mora si aplica según el plan
                     $plan = $contrato->plan;
-                    // Solo cobramos mora si el saldo es igual al original (no se ha abonado la primera vez)
-                    // O si decides que siempre se suma mora. Asumimos que si abonó, ya pagó la mora.
                     if ($plan && $plan->mora_base > 0 && $saldoPendiente == $montoOriginal) {
                         $diasGracia = $plan->dias_gracia ?? 0;
                         $fechaVencimientoLimite = Carbon::parse($cargo->fecha_vencimiento)->addDays($diasGracia);
@@ -97,25 +92,25 @@ class PagoController extends Controller
                         'fecha_vencimiento'  => $cargo->fecha_vencimiento->toDateString(),
                     ];
                 }
-            }
 
-            $resultados[] = [
-                'id'                 => $cliente->id,
-                'codigo_cliente'     => $cliente->codigo_cliente,
-                'nombre'             => $cliente->nombre,
-                'numero_identificacion' => $cliente->numero_identificacion,
-                'telefono'           => $cliente->telefono,
-                'direccion'          => $cliente->direccion,
-                'activo'             => $cliente->activo,
-                'contrato'           => $contrato ? [
-                    'id'                     => $contrato->id,
-                    'plan_nombre'            => $contrato->plan->nombre,
-                    'precio_mensual_pactado' => $contrato->precio_mensual_pactado,
-                    'estado'                 => $contrato->estado,
-                ] : null,
-                'cargos_pendientes'  => $cargosPendientes,
-                'total_pendiente'    => round($totalPendiente, 2),
-            ];
+                $resultados[] = [
+                    'cliente' => [
+                        'id'                    => $cliente->id,
+                        'codigo_cliente'        => $cliente->codigo_cliente,
+                        'nombre'                => $cliente->nombre,
+                        'numero_identificacion' => $cliente->numero_identificacion,
+                    ],
+                    'contrato' => [
+                        'id'                     => $contrato->id,
+                        'plan_nombre'            => $contrato->plan->nombre,
+                        'precio_mensual_pactado' => $contrato->precio_mensual_pactado,
+                        'direccion_servicio'     => $contrato->direccion_servicio ?? $cliente->direccion,
+                        'estado'                 => $contrato->estado,
+                    ],
+                    'cargos_pendientes'  => $cargosPendientes,
+                    'total_pendiente'    => round($totalPendiente, 2),
+                ];
+            }
         }
 
         return response()->json($resultados);

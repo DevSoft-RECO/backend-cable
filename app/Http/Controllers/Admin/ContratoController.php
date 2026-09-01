@@ -55,21 +55,12 @@ class ContratoController extends Controller
             'precio_mensual_pactado' => 'required|numeric|min:0',
             'costo_instalacion'      => 'required|numeric|min:0',
             'fecha_inicio'           => 'required|date',
+            'direccion_servicio'     => 'nullable|string|max:255',
+            'coordenadas_gps'        => 'nullable|string|max:150',
             'campana_descuento_id'   => 'nullable|exists:campanas_descuento,id',
         ]);
 
         $fechaInicio = Carbon::parse($request->fecha_inicio);
-
-        // Validar que el cliente no tenga ya un contrato activo (un cliente, un contrato para simplificar)
-        $existeActivo = Contrato::where('cliente_id', $request->cliente_id)
-            ->where('estado', 'activo')
-            ->exists();
-
-        if ($existeActivo) {
-            return response()->json([
-                'message' => 'El cliente ya tiene un contrato activo.'
-            ], 422);
-        }
 
         $contrato = DB::transaction(function () use ($request, $fechaInicio) {
             // 1. Crear el contrato
@@ -79,6 +70,8 @@ class ContratoController extends Controller
                 'precio_mensual_pactado' => $request->precio_mensual_pactado,
                 'costo_instalacion'      => $request->costo_instalacion,
                 'fecha_inicio'           => $request->fecha_inicio,
+                'direccion_servicio'     => $request->direccion_servicio,
+                'coordenadas_gps'        => $request->coordenadas_gps,
                 'estado'                 => 'activo',
                 'campana_descuento_id'   => $request->campana_descuento_id,
             ]);
@@ -228,6 +221,8 @@ class ContratoController extends Controller
             'precio_mensual_pactado' => 'required|numeric|min:0',
             'costo_instalacion'      => 'required|numeric|min:0',
             'fecha_inicio'           => 'required|date',
+            'direccion_servicio'     => 'nullable|string|max:255',
+            'coordenadas_gps'        => 'nullable|string|max:150',
             'estado'                 => 'required|in:activo,suspendido,cancelado',
             'campana_descuento_id'   => 'nullable|exists:campanas_descuento,id',
         ]);
@@ -237,6 +232,8 @@ class ContratoController extends Controller
             'precio_mensual_pactado' => $request->precio_mensual_pactado,
             'costo_instalacion'      => $request->costo_instalacion,
             'fecha_inicio'           => $request->fecha_inicio,
+            'direccion_servicio'     => $request->direccion_servicio,
+            'coordenadas_gps'        => $request->coordenadas_gps,
             'estado'                 => $request->estado,
             'campana_descuento_id'   => $request->campana_descuento_id,
         ]);

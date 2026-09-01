@@ -21,7 +21,6 @@ return new class extends Migration
             $table->string('router_password')->nullable();
             $table->string('wifi_ssid')->nullable();
             $table->string('wifi_password')->nullable();
-            $table->string('coordenadas_gps')->nullable();
             $table->text('notas')->nullable();
             $table->timestamps();
         });
