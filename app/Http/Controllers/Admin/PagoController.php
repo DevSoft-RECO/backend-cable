@@ -154,19 +154,7 @@ class PagoController extends Controller
 
         DB::transaction(function () use ($request, $cargos, &$montoRestante, &$pagosGenerados, $contrato) {
             // Generar folio secuencial REC-AAAA-NNNN único para toda la transacción
-            $year = Carbon::now()->year;
-            $latestPagoThisYear = Pago::whereYear('fecha_pago', $year)
-                ->whereNotNull('codigo_recibo')
-                ->orderBy('id', 'desc')
-                ->first();
-            $nextSequence = 1;
-            if ($latestPagoThisYear) {
-                $parts = explode('-', $latestPagoThisYear->codigo_recibo);
-                if (count($parts) === 3) {
-                    $nextSequence = ((int) $parts[2]) + 1;
-                }
-            }
-            $codigoRecibo = 'REC-' . $year . '-' . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+            $codigoRecibo = $this->generarCodigoRecibo();
             $hoy = Carbon::now();
 
             foreach ($cargos as $cargo) {
@@ -268,19 +256,7 @@ class PagoController extends Controller
 
         $pago = DB::transaction(function () use ($request, $cargo, $montoFinal, $contrato) {
             // Generar folio secuencial REC-AAAA-NNNN
-            $year = Carbon::now()->year;
-            $latestPagoThisYear = Pago::whereYear('fecha_pago', $year)
-                ->whereNotNull('codigo_recibo')
-                ->orderBy('id', 'desc')
-                ->first();
-            $nextSequence = 1;
-            if ($latestPagoThisYear) {
-                $parts = explode('-', $latestPagoThisYear->codigo_recibo);
-                if (count($parts) === 3) {
-                    $nextSequence = ((int) $parts[2]) + 1;
-                }
-            }
-            $codigoRecibo = 'REC-' . $year . '-' . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+            $codigoRecibo = $this->generarCodigoRecibo();
 
             // 1. Crear el pago
             $pago = Pago::create([
@@ -344,5 +320,35 @@ class PagoController extends Controller
         $pdf->setPaper([0, 0, 226.77, $altura], 'portrait');
 
         return $pdf->stream('recibo-' . ($pagoInicial->codigo_recibo ?? $pagoInicial->id) . '.pdf');
+    }
+
+    /**
+     * Genera un código de recibo secuencial único (REC-AAAA-NNNN) resistente a colisiones.
+     */
+    private function generarCodigoRecibo(): string
+    {
+        $year = Carbon::now()->year;
+        $latestPagoThisYear = Pago::where('codigo_recibo', 'LIKE', "REC-{$year}-%")
+            ->orderByRaw('CAST(SUBSTRING_INDEX(codigo_recibo, "-", -1) AS UNSIGNED) DESC')
+            ->first();
+
+        $nextSequence = 1;
+        if ($latestPagoThisYear && $latestPagoThisYear->codigo_recibo) {
+            $parts = explode('-', $latestPagoThisYear->codigo_recibo);
+            if (count($parts) === 3) {
+                $nextSequence = ((int) $parts[2]) + 1;
+            }
+        }
+
+        // Bucle de seguridad por si acaso ya existe el correlativo en la BD
+        do {
+            $codigoRecibo = 'REC-' . $year . '-' . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+            $exists = Pago::where('codigo_recibo', $codigoRecibo)->exists();
+            if ($exists) {
+                $nextSequence++;
+            }
+        } while ($exists);
+
+        return $codigoRecibo;
     }
 }

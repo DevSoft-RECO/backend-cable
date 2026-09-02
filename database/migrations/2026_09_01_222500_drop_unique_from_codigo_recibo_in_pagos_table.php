@@ -12,7 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('pagos', function (Blueprint $table) {
-            $table->string('codigo_recibo')->nullable()->after('usuario_id');
+            // Eliminar la restricción UNIQUE del campo codigo_recibo si existe
+            // para permitir que un mismo recibo agrupe múltiples cargos en una sola transacción.
+            try {
+                $table->dropUnique('pagos_codigo_recibo_unique');
+            } catch (\Exception $e) {
+                // Ignorar si el índice no existía
+            }
         });
     }
 
@@ -22,7 +28,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('pagos', function (Blueprint $table) {
-            $table->dropColumn('codigo_recibo');
+            $table->unique('codigo_recibo');
         });
     }
 };
