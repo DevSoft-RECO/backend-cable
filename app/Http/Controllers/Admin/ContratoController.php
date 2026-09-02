@@ -17,7 +17,18 @@ class ContratoController extends Controller
      */
     public function index()
     {
-        $contratos = Contrato::with(['cliente', 'plan'])->orderBy('id', 'desc')->get();
+        $contratos = Contrato::with(['cliente', 'plan'])
+            ->withCount([
+                'cargos as cargos_atrasados_count' => function ($q) {
+                    $q->whereIn('estado', ['pendiente', 'parcial'])
+                      ->where('fecha_vencimiento', '<', now()->toDateString());
+                },
+                'cargos as cargos_pendientes_count' => function ($q) {
+                    $q->whereIn('estado', ['pendiente', 'parcial'])
+                      ->where('fecha_vencimiento', '>=', now()->toDateString());
+                }
+            ])
+            ->orderBy('id', 'desc')->get();
         return response()->json($contratos);
     }
 
