@@ -36,7 +36,6 @@ class DetalleTecnicoController extends Controller
             'router_password' => 'nullable|string|max:100',
             'wifi_ssid' => 'nullable|string|max:100',
             'wifi_password' => 'nullable|string|max:100',
-            'coordenadas_gps' => 'nullable|string|max:150',
             'notas' => 'nullable|string',
         ]);
 
@@ -52,7 +51,6 @@ class DetalleTecnicoController extends Controller
                 'router_password' => $request->router_password,
                 'wifi_ssid' => $request->wifi_ssid,
                 'wifi_password' => $request->wifi_password,
-                'coordenadas_gps' => $request->coordenadas_gps,
                 'notas' => $request->notas,
             ]
         );

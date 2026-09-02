@@ -20,7 +20,6 @@ class DetalleTecnico extends Model
         'router_password',
         'wifi_ssid',
         'wifi_password',
-        'coordenadas_gps',
         'notas',
     ];
 
