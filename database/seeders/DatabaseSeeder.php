@@ -16,16 +16,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Crear el Super Admin si aún no existe
-        User::firstOrCreate(
+        // 1. Crear o actualizar el usuario Super Admin principal
+        User::updateOrCreate(
             ['email' => 'admin@admin.com'],
             [
-                'name'     => 'Ronald Emanuel Cardona',
+                'name'     => 'Administrador',
                 'password' => Hash::make('123456'),
             ]
         );
 
-        // Crear roles, permisos y asignar Super Admin al primer usuario
+        // 2. Ejecutar Seeder de Roles y Permisos
         $this->call(RolesAndPermissionsSeeder::class);
     }
 }

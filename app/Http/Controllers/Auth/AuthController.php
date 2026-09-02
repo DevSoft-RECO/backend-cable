@@ -54,18 +54,19 @@ class AuthController extends Controller
     private function formatUser(User $user): array
     {
         $isSuperAdmin = $user->hasRole('Super Admin');
-        $verDashboard = $isSuperAdmin || $user->hasPermissionTo('ver-dashboard');
+        $allPermissions = $isSuperAdmin
+            ? \Spatie\Permission\Models\Permission::pluck('name')->toArray()
+            : $user->getAllPermissions()->pluck('name')->toArray();
 
         return [
-            'id'            => $user->id,
-            'name'          => $user->name,
-            'email'         => $user->email,
-            'role'          => $user->getRoleNames()->first() ?? 'Sin rol',
-            'permissions'   => $user->getAllPermissions()->pluck('name')->toArray(),
-            'ver_dashboard' => $verDashboard,
-            'photo_url'     => $user->profile_photo_path
-                                ? url('uploads/' . $user->profile_photo_path)
-                                : null,
+            'id'          => $user->id,
+            'name'        => $user->name,
+            'email'       => $user->email,
+            'role'        => $user->getRoleNames()->first() ?? 'Sin rol',
+            'permissions' => array_values(array_unique($allPermissions)),
+            'photo_url'   => $user->profile_photo_path
+                              ? url('uploads/' . $user->profile_photo_path)
+                              : null,
         ];
     }
 }

@@ -69,13 +69,14 @@ use App\Http\Controllers\Admin\ReporteController;
         Route::put('/admin/servicios/plan/{id}', [ServiciosController::class, 'updatePlan']);
         Route::delete('/admin/servicios/plan/{id}', [ServiciosController::class, 'destroyPlan']);
 
-        // --- Gestión de Usuarios (Super Admin) ---
+        // --- Gestión de Usuarios ---
         Route::prefix('admin/usuarios')->group(function () {
+            Route::get('/roles-permisos', [UserController::class, 'getRolesAndPermissions']);
             Route::get('/',          [UserController::class, 'index']);
             Route::post('/',         [UserController::class, 'store']);
             Route::put('/{id}',      [UserController::class, 'update']);
             Route::delete('/{id}',   [UserController::class, 'destroy']);
-            Route::put('/{id}/permisos', [UserController::class, 'togglePermiso']);
+            Route::put('/{id}/permisos', [UserController::class, 'updatePermisos']);
         });
 
         // --- Gestión de Planes de Cobro ---
