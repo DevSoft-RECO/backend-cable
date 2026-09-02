@@ -153,6 +153,14 @@ class UserController extends Controller
     }
 
     /**
+     * Alias para compatibilidad con rutas en caché de producción
+     */
+    public function togglePermiso(Request $request, $id)
+    {
+        return $this->updatePermisos($request, $id);
+    }
+
+    /**
      * POST /profile/update
      * Actualiza el perfil del usuario autenticado.
      */
